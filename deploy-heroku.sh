@@ -3,17 +3,30 @@
 # Exit on error
 set -e
 
-# BRANCH_TO_DEPLOY is required (e.g. main, streamable-http, or feature branch name)
+# BRANCH_TO_DEPLOY is optional (default: current branch)
 # HEROKU_APP is optional (default: datadog-mcp)
-BRANCH_TO_DEPLOY="${1:-}"
+BRANCH_TO_DEPLOY="${1:-$(git branch --show-current)}"
 HEROKU_APP="${2:-datadog-mcp}"
 
 if [ -z "$BRANCH_TO_DEPLOY" ]; then
-    echo "Usage: $0 <BRANCH_TO_DEPLOY> [HEROKU_APP]"
+    echo "Usage: $0 [BRANCH_TO_DEPLOY] [HEROKU_APP]"
+    echo "Example: $0              # deploy current branch"
     echo "Example: $0 main"
     echo "Example: $0 streamable-http datadog-mcp"
     echo ""
     echo "Deploys to Heroku with streamable-http (BYOT: credentials via request headers)."
+    exit 1
+fi
+
+# Ensure the branch exists locally
+if ! git show-ref --quiet "refs/heads/$BRANCH_TO_DEPLOY"; then
+    echo "❌ Branch '$BRANCH_TO_DEPLOY' not found locally."
+    echo ""
+    echo "   Local branches:"
+    git branch --list | sed 's/^/     /'
+    echo ""
+    echo "   Deploy the current branch with: $0"
+    echo "   Or checkout/create the branch first, then run $0 $BRANCH_TO_DEPLOY"
     exit 1
 fi
 
