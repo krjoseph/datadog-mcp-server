@@ -1,4 +1,5 @@
 import { client } from "@datadog/datadog-api-client";
+import { getCredentials, validateCredentials, getDdApiBaseUrl } from "../utils/requestContext.js";
 
 type AggregateLogsParams = {
   filter?: {
@@ -50,17 +51,18 @@ export const aggregateLogs = {
 
   execute: async (params: AggregateLogsParams) => {
     try {
+      // Get credentials from request context (HTTP mode) or environment (stdio mode)
+      const credentials = getCredentials();
+      validateCredentials(credentials);
+
       const { filter, compute, groupBy, options } = params;
 
-      // Directly call with fetch to use the documented aggregation endpoint
-      const apiUrl = `https://${
-        process.env.DD_LOGS_SITE || "datadoghq.com"
-      }/api/v2/logs/analytics/aggregate`;
+      const apiUrl = `${getDdApiBaseUrl("logs")}/api/v2/logs/analytics/aggregate`;
 
       const headers = {
         "Content-Type": "application/json",
-        "DD-API-KEY": process.env.DD_API_KEY || "",
-        "DD-APPLICATION-KEY": process.env.DD_APP_KEY || ""
+        "DD-API-KEY": credentials.apiKey!,
+        "DD-APPLICATION-KEY": credentials.appKey!
       };
 
       const body = {

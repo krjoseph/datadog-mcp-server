@@ -18,11 +18,19 @@ import { getMonitor } from "./tools/getMonitor.js";
 import { getMonitors } from "./tools/getMonitors.js";
 import { searchLogs } from "./tools/searchLogs.js";
 
+// Import HTTP transport handler
+import { HttpTransportHandler } from "./transports/HttpTransportHandler.js";
+
 // Parse command line arguments
 const argv = minimist(process.argv.slice(2));
 
 // Load environment variables from .env file (if it exists)
 dotenv.config();
+
+// Check if running in HTTP mode
+const HTTP_MODE = argv.http || process.env.HTTP_MODE === "true";
+const HTTP_PORT = argv.port || process.env.PORT;
+const HTTP_HOST = argv.host || process.env.HOST;
 
 // Define environment variables - from command line or .env file
 const DD_API_KEY = argv.apiKey || process.env.DD_API_KEY;
@@ -48,33 +56,38 @@ process.env.DD_SITE = cleanupUrl(DD_SITE);
 process.env.DD_LOGS_SITE = cleanupUrl(DD_LOGS_SITE);
 process.env.DD_METRICS_SITE = cleanupUrl(DD_METRICS_SITE);
 
-// Validate required environment variables
-if (!DD_API_KEY) {
-  console.error("Error: DD_API_KEY is required.");
-  console.error("Please provide it via command line argument or .env file.");
-  console.error(" Command line: --apiKey=your_api_key");
-  process.exit(1);
+// In stdio mode, validate required environment variables
+// In HTTP mode, credentials come from headers per-request
+if (!HTTP_MODE) {
+  if (!DD_API_KEY) {
+    console.error("Error: DD_API_KEY is required for stdio mode.");
+    console.error("Please provide it via command line argument or .env file.");
+    console.error(" Command line: --apiKey=your_api_key");
+    process.exit(1);
+  }
+
+  if (!DD_APP_KEY) {
+    console.error("Error: DD_APP_KEY is required for stdio mode.");
+    console.error("Please provide it via command line argument or .env file.");
+    console.error(" Command line: --appKey=your_app_key");
+    process.exit(1);
+  }
 }
 
-if (!DD_APP_KEY) {
-  console.error("Error: DD_APP_KEY is required.");
-  console.error("Please provide it via command line argument or .env file.");
-  console.error(" Command line: --appKey=your_app_key");
-  process.exit(1);
+// Initialize Datadog client tools only in stdio mode
+// In HTTP mode, tools will be initialized per-request with credentials from headers
+if (!HTTP_MODE) {
+  getMonitors.initialize();
+  getMonitor.initialize();
+  getDashboards.initialize();
+  getDashboard.initialize();
+  getMetrics.initialize();
+  getMetricMetadata.initialize();
+  getEvents.initialize();
+  getIncidents.initialize();
+  searchLogs.initialize();
+  aggregateLogs.initialize();
 }
-
-// Initialize Datadog client tools
-// We initialize each tool which will use the appropriate site configuration
-getMonitors.initialize();
-getMonitor.initialize();
-getDashboards.initialize();
-getDashboard.initialize();
-getMetrics.initialize();
-getMetricMetadata.initialize();
-getEvents.initialize();
-getIncidents.initialize();
-searchLogs.initialize();
-aggregateLogs.initialize();
 
 // Set up MCP server
 const server = new McpServer({
@@ -291,10 +304,31 @@ server.tool(
 );
 
 // Start the server
-const transport = new StdioServerTransport();
-server
-  .connect(transport)
-  .then(() => {})
-  .catch((error: unknown) => {
-    console.error("Failed to start Datadog MCP Server:", error);
+if (HTTP_MODE) {
+  console.log("Starting Datadog MCP Server in HTTP mode...");
+  const httpHandler = new HttpTransportHandler(server, {
+    port: HTTP_PORT ? parseInt(HTTP_PORT) : undefined,
+    host: HTTP_HOST
   });
+  httpHandler
+    .connect()
+    .then(() => {
+      console.log("Datadog MCP Server started successfully in HTTP mode");
+    })
+    .catch((error: unknown) => {
+      console.error("Failed to start Datadog MCP Server in HTTP mode:", error);
+      process.exit(1);
+    });
+} else {
+  console.log("Starting Datadog MCP Server in stdio mode...");
+  const transport = new StdioServerTransport();
+  server
+    .connect(transport)
+    .then(() => {
+      console.log("Datadog MCP Server started successfully in stdio mode");
+    })
+    .catch((error: unknown) => {
+      console.error("Failed to start Datadog MCP Server:", error);
+      process.exit(1);
+    });
+}
