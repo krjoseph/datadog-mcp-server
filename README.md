@@ -77,9 +77,16 @@ npm install -g datadog-mcp-server
 
 ## Configuration
 
+The Datadog MCP server supports two modes of operation:
+
+1. **Stdio Mode** (default): Traditional MCP server for local use with Claude Desktop or MCP Inspector
+2. **HTTP Mode**: Streamable HTTP server for multi-user, multi-org deployments
+
+### Stdio Mode (Default)
+
 You can configure the Datadog MCP server using either environment variables or command-line arguments.
 
-### Environment Variables
+#### Environment Variables
 
 Create a `.env` file with your Datadog credentials:
 
@@ -93,7 +100,7 @@ DD_METRICS_SITE=datadoghq.com
 
 **Note**: `DD_LOGS_SITE` and `DD_METRICS_SITE` are optional and will default to the value of `DD_SITE` if not specified.
 
-### Command-line Arguments
+#### Command-line Arguments
 
 Basic usage with global site setting:
 
@@ -109,7 +116,7 @@ datadog-mcp-server --apiKey=your_api_key --appKey=your_app_key --site=datadoghq.
 
 Note: Site arguments don't need `https://` - it will be added automatically.
 
-### Regional Endpoints
+#### Regional Endpoints
 
 Different Datadog regions have different endpoints:
 
@@ -119,7 +126,117 @@ Different Datadog regions have different endpoints:
 - US5: `us5.datadoghq.com`
 - AP1: `ap1.datadoghq.com`
 
-### Usage with Claude Desktop
+### HTTP Mode (Streamable HTTP)
+
+HTTP mode enables the Datadog MCP server to run as a multi-user, multi-org HTTP server with per-request authentication. This is ideal for production deployments where multiple users or organizations need to access the server.
+
+#### Key Features
+
+- **Per-Request Authentication**: Credentials are passed via HTTP headers for each request
+- **No Credential Caching**: Each request creates a new transport/session for security
+- **Multi-User/Multi-Org Safe**: Prevents credential leakage between users and organizations
+- **No Connection Hang-ups**: Avoids issues from reusing transports and sessions
+
+#### Starting the Server in HTTP Mode
+
+**Using npm scripts (if running from source):**
+```bash
+# Build and start in HTTP mode (default port 3000)
+npm run dev:http
+
+# Or just start (if already built)
+npm run start:http
+```
+
+**Using command-line flags:**
+```bash
+# Using command-line flag
+datadog-mcp-server --http --port=3000 --host=0.0.0.0
+
+# Using environment variables
+HTTP_MODE=true PORT=3000 HOST=0.0.0.0 datadog-mcp-server
+
+# With site configuration (optional)
+datadog-mcp-server --http --port=3000 --site=datadoghq.eu
+```
+
+**Note**: In HTTP mode, API and App keys are NOT required at startup. They must be provided per-request via HTTP headers.
+
+#### Authentication Headers
+
+When making requests to the HTTP server, provide credentials using these headers:
+
+- **`Authorization: Bearer <app_key>`** - Your Datadog Application Key (user key)
+- **`X-DD-API-Key: <api_key>`** - Your Datadog API Key
+
+#### Example HTTP Request
+
+```bash
+curl -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your_app_key_here" \
+  -H "X-DD-API-Key: your_api_key_here" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/call",
+    "params": {
+      "name": "search-logs",
+      "arguments": {
+        "filter": {
+          "query": "service:web-app status:error",
+          "from": "now-15m",
+          "to": "now"
+        },
+        "limit": 20
+      }
+    },
+    "id": 1
+  }'
+```
+
+#### Health Check Endpoint
+
+The HTTP server provides a health check endpoint:
+
+```bash
+curl http://localhost:3000/health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "server": "datadog-mcp",
+  "version": "1.0.0",
+  "timestamp": "2026-02-07T12:00:00.000Z"
+}
+```
+
+#### Security Considerations
+
+- **No Credential Storage**: Credentials are never stored or cached on the server
+- **Isolated Sessions**: Each request gets its own transport and session
+- **Request Timeout**: Requests timeout after 25 seconds to prevent hanging connections
+- **Per-Request Validation**: Credentials are validated on every request
+
+#### Deployment Example (Docker)
+
+```dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install the server
+RUN npm install -g datadog-mcp-server
+
+# Expose the port
+EXPOSE 3000
+
+# Start in HTTP mode
+CMD ["datadog-mcp-server", "--http", "--port=3000", "--host=0.0.0.0"]
+```
+
+#### Usage with Claude Desktop
 
 Add this to your `claude_desktop_config.json`:
 

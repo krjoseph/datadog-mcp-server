@@ -1,4 +1,5 @@
 import { client, v1 } from "@datadog/datadog-api-client";
+import { getCredentials, validateCredentials, getDdSite } from "../utils/requestContext.js";
 
 type GetMonitorParams = {
   monitorId: number;
@@ -26,9 +27,27 @@ export const getMonitor = {
 
   execute: async (params: GetMonitorParams) => {
     try {
+      // Get credentials from request context (HTTP mode) or environment (stdio mode)
+      const credentials = getCredentials();
+      validateCredentials(credentials);
+
+      // Create configuration per-request for HTTP mode security
+      const configOpts = {
+        authMethods: {
+          apiKeyAuth: credentials.apiKey,
+          appKeyAuth: credentials.appKey
+        }
+      };
+
+      const requestConfig = client.createConfiguration(configOpts);
+
+      requestConfig.setServerVariables({
+        site: getDdSite("metrics")
+      });
+
       const { monitorId } = params;
 
-      const apiInstance = new v1.MonitorsApi(configuration);
+      const apiInstance = new v1.MonitorsApi(requestConfig);
 
       const apiParams: v1.MonitorsApiGetMonitorRequest = {
         monitorId: monitorId

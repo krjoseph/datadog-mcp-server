@@ -1,4 +1,5 @@
 import { client, v2 } from "@datadog/datadog-api-client";
+import { getCredentials, validateCredentials, getDdSite } from "../utils/requestContext.js";
 
 type GetIncidentsParams = {
   includeArchived?: boolean;
@@ -33,9 +34,30 @@ export const getIncidents = {
 
   execute: async (params: GetIncidentsParams) => {
     try {
+      // Get credentials from request context (HTTP mode) or environment (stdio mode)
+      const credentials = getCredentials();
+      validateCredentials(credentials);
+
+      // Create configuration per-request for HTTP mode security
+      const configOpts = {
+        authMethods: {
+          apiKeyAuth: credentials.apiKey,
+          appKeyAuth: credentials.appKey
+        }
+      };
+
+      const requestConfig = client.createConfiguration(configOpts);
+
+      requestConfig.setServerVariables({
+        site: getDdSite()
+      });
+
+      // Enable the unstable operation
+      requestConfig.unstableOperations["v2.listIncidents"] = true;
+
       const { includeArchived, pageSize, pageOffset, query, limit } = params;
 
-      const apiInstance = new v2.IncidentsApi(configuration);
+      const apiInstance = new v2.IncidentsApi(requestConfig);
 
       const apiParams: any = {};
 

@@ -1,4 +1,5 @@
 import { client, v2 } from "@datadog/datadog-api-client";
+import { getCredentials, validateCredentials, getDdApiBaseUrl } from "../utils/requestContext.js";
 
 type SearchLogsParams = {
   filter?: {
@@ -13,8 +14,6 @@ type SearchLogsParams = {
     cursor?: string;
   };
   limit?: number;
-  apiKey?: string;
-  appKey?: string;
 };
 
 let configuration: client.Configuration;
@@ -42,18 +41,14 @@ export const searchLogs = {
 
   execute: async (params: SearchLogsParams) => {
     try {
-      const {
-        apiKey = process.env.DD_API_KEY,
-        appKey = process.env.DD_APP_KEY,
-        filter,
-        sort,
-        page,
-        limit
-      } = params;
+      // Get credentials from request context (HTTP mode) or environment (stdio mode)
+      const credentials = getCredentials();
+      validateCredentials(credentials);
 
-      if (!apiKey || !appKey) {
-        throw new Error("API Key and App Key are required");
-      }
+      const { filter, sort, page, limit } = params;
+
+      const apiKey = credentials.apiKey!;
+      const appKey = credentials.appKey!;
 
       const apiInstance = new v2.LogsApi(configuration);
 
@@ -65,10 +60,7 @@ export const searchLogs = {
         page: page
       };
 
-      // Use DD_LOGS_SITE environment variable instead of DD_SITE
-      const apiUrl = `https://${
-        process.env.DD_LOGS_SITE || "datadoghq.com"
-      }/api/v2/logs/events/search`;
+      const apiUrl = `${getDdApiBaseUrl("logs")}/api/v2/logs/events/search`;
 
       const headers = {
         "Content-Type": "application/json",

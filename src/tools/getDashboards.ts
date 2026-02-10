@@ -1,4 +1,5 @@
 import { client, v1 } from "@datadog/datadog-api-client";
+import { getCredentials, validateCredentials, getDdSite } from "../utils/requestContext.js";
 
 type GetDashboardsParams = {
   filterConfigured?: boolean;
@@ -27,9 +28,27 @@ export const getDashboards = {
 
   execute: async (params: GetDashboardsParams) => {
     try {
+      // Get credentials from request context (HTTP mode) or environment (stdio mode)
+      const credentials = getCredentials();
+      validateCredentials(credentials);
+
+      // Create configuration per-request for HTTP mode security
+      const configOpts = {
+        authMethods: {
+          apiKeyAuth: credentials.apiKey,
+          appKeyAuth: credentials.appKey
+        }
+      };
+
+      const requestConfig = client.createConfiguration(configOpts);
+
+      requestConfig.setServerVariables({
+        site: getDdSite()
+      });
+
       const { filterConfigured, limit } = params;
 
-      const apiInstance = new v1.DashboardsApi(configuration);
+      const apiInstance = new v1.DashboardsApi(requestConfig);
 
       // No parameters needed for listDashboards
       const response = await apiInstance.listDashboards();
